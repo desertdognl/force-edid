@@ -33,7 +33,7 @@ final class StatusBarController {
         let menu = NSMenu()
         menu.addItem(withTitle: "Show Force EDID", action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(withTitle: "Apply last EDID", action: #selector(apply), keyEquivalent: "")
+        menu.addItem(withTitle: "Apply assigned EDIDs", action: #selector(apply), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh displays", action: #selector(refresh), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "DesertDog", action: #selector(openSite), keyEquivalent: "")
@@ -60,7 +60,7 @@ final class StatusBarController {
     }
 
     @objc private func apply() {
-        state?.applySelected()
+        state?.applyAssignedToConnectedDisplays()
     }
 
     @objc private func refresh() {

@@ -2,9 +2,11 @@ import Foundation
 
 struct ExternalDisplay: Identifiable, Hashable {
     let id: String
+    let name: String
+    let displayID: UInt32
+    let uuid: String?
     let location: String
     let registryPath: String
-    let name: String
     let vendor: String?
     let product: String?
     let currentEDID: Data?
@@ -55,6 +57,7 @@ enum ForceEDIDError: LocalizedError {
     case notAppleSilicon
     case noExternalDisplays
     case displayNotFound
+    case couldNotMatchDisplay(String)
     case invalidEDID
     case cannotReadFile
     case applyFailed(Int32)
@@ -69,6 +72,8 @@ enum ForceEDIDError: LocalizedError {
             return "No external display services were found. Connect the ATEN receiver and try Refresh."
         case .displayNotFound:
             return "The selected display is no longer available."
+        case .couldNotMatchDisplay(let name):
+            return "Could not match “\(name)” to a video service. Apply to all if every screen should use this EDID, or unplug the other display and try again."
         case .invalidEDID:
             return "That file is not a valid EDID. Use a raw 128- or 256-byte binary."
         case .cannotReadFile:

@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var state: AppState
     @State private var confirmApply = false
+    @State private var confirmApplyAll = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -23,9 +24,23 @@ struct ContentView: View {
         .onAppear { WindowCentering.centerIfNeeded() }
         .alert("Apply this EDID?", isPresented: $confirmApply) {
             Button("Cancel", role: .cancel) {}
-            Button("Apply") { state.applySelected() }
+            Button("Apply") { state.applyToSelectedDisplay() }
         } message: {
-            Text("The ATEN link may blink while the extender renegotiates. That is expected.")
+            if let name = state.selectedDisplay?.name, let profile = state.selectedProfile?.name {
+                Text("Apply “\(profile)” to \(name) only. The ATEN link may blink while the extender renegotiates.")
+            } else {
+                Text("The ATEN link may blink while the extender renegotiates. That is expected.")
+            }
+        }
+        .alert("Apply to all displays?", isPresented: $confirmApplyAll) {
+            Button("Cancel", role: .cancel) {}
+            Button("Apply to all") { state.applyToAllDisplays() }
+        } message: {
+            if let profile = state.selectedProfile?.name {
+                Text("Apply “\(profile)” to every external display. Each link may blink once.")
+            } else {
+                Text("Every external display will receive this EDID.")
+            }
         }
     }
 
@@ -119,7 +134,7 @@ struct ContentView: View {
             }
             .controlSize(.regular)
 
-            Text("Tip: capture while the display is plugged in directly, then apply that file through the ATEN.")
+            Text("Each display can have its own EDID. Apply to this display, or the same EDID to all. Capture while the panel is plugged in directly.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -148,7 +163,7 @@ struct ContentView: View {
                     }
                 }
             }
-            .frame(height: 150)
+            .frame(height: 120)
 
             if let profile = state.selectedProfile, let summary = state.selectedProfileSummary {
                 GroupBox("Selected EDID") {
@@ -164,12 +179,19 @@ struct ContentView: View {
                 Button {
                     confirmApply = true
                 } label: {
-                    Label("Apply EDID", systemImage: "lock.fill")
+                    Label("Apply to this display", systemImage: "lock.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(state.selectedProfile == nil || state.displays.isEmpty || !IOAVBridge.isAppleSilicon)
+                .disabled(state.selectedProfile == nil || state.selectedDisplay == nil || !IOAVBridge.isAppleSilicon)
 
-                Button("Reset to factory") { state.resetSelected() }
+                Button("Apply to all") { confirmApplyAll = true }
+                    .disabled(state.selectedProfile == nil || state.displays.isEmpty || !IOAVBridge.isAppleSilicon)
+            }
+
+            HStack(spacing: 8) {
+                Button("Reset this display") { state.resetSelectedDisplay() }
+                    .disabled(state.selectedDisplay == nil || !IOAVBridge.isAppleSilicon)
+                Button("Reset all") { state.resetAllDisplays() }
                     .disabled(state.displays.isEmpty || !IOAVBridge.isAppleSilicon)
             }
         }
@@ -179,7 +201,7 @@ struct ContentView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Toggle("Reapply after a drop of", isOn: $state.autoReapply)
+                Toggle("Reapply each display after a drop of", isOn: $state.autoReapply)
                 Stepper(value: $state.reapplyAfterDropSeconds, in: 1...30) {
                     Text("\(state.reapplyAfterDropSeconds) s")
                         .monospacedDigit()
@@ -262,19 +284,19 @@ struct ContentView: View {
     private func displayRow(_ display: ExternalDisplay) -> some View {
         let selected = display.id == state.selectedDisplayID
         return Button {
-            state.selectedDisplayID = display.id
+            state.selectDisplay(display.id)
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "display")
+                Image(systemName: state.assignedProfileID(for: display) == nil ? "display" : "lock.display")
                     .foregroundStyle(selected ? Color.accentColor : .secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(display.name)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
-                    Text(display.location)
+                    Text(state.assignedProfileName(for: display) ?? "No EDID assigned")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(state.assignedProfileID(for: display) == nil ? .secondary : Color.accentColor)
                 }
             }
             .padding(8)

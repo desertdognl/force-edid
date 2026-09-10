@@ -14,8 +14,8 @@ It does **not** turn HDCP on or off. Apple still handles HDCP automatically. A s
    - **1080p60 HDMI** — most reliable on HDMI Cat6 / HDBaseT-class boxes
    - **4K30 HDMI 1.4** — typical ATEN 4K ceiling
    - **4K60 HDMI 2.0** — only if the extender actually carries 18 Gbps
-4. Select the external display and click **Apply to selected display**.
-5. Leave **Reapply when the display reconnects** on. The override is not saved across reboot, so also enable **Open at login**.
+4. Select an external display, pick an EDID, then **Apply to this display**. Use **Apply to all** if every monitor should get the same lock.
+5. Leave **Reapply each display after a drop** on. Each screen is tracked on its own, so one ATEN drop does not wait for the other monitors to disappear. The override is not saved across reboot, so also enable **Open at login**.
 
 The picture may blink once. That is the link renegotiating with the locked EDID.
 
@@ -52,7 +52,8 @@ The same binary works as a scriptable tool:
 ```bash
 "build/Force EDID.app/Contents/MacOS/ForceEDID" --list
 "build/Force EDID.app/Contents/MacOS/ForceEDID" --apply ~/Displays/living-room.bin
-"build/Force EDID.app/Contents/MacOS/ForceEDID" --capture ~/Displays/current.bin
+"build/Force EDID.app/Contents/MacOS/ForceEDID" --apply ~/Displays/living-room.bin --display "LG UltraFine"
+"build/Force EDID.app/Contents/MacOS/ForceEDID" --capture ~/Displays/current.bin --display "LG UltraFine"
 "build/Force EDID.app/Contents/MacOS/ForceEDID" --reset
 ```
 

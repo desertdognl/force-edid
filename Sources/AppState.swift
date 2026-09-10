@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
     @Published var status: AppStatus = .idle
     @Published var lastAppliedAt: Date?
     @Published var lastAppliedProfileName: String?
+    @Published var assignments: [String: String] = [:]
 
     @AppStorage("autoReapply") var autoReapply = true
     @AppStorage("reapplyAfterDropSeconds") var reapplyAfterDropSeconds = 3
@@ -28,10 +29,15 @@ final class AppState: ObservableObject {
     private var dropWatchTask: Task<Void, Never>?
     private var didBootstrap = false
     private var cancellables = Set<AnyCancellable>()
-    private var displayMissingSince: Date?
-    private var dropQualified = false
-    private var ignorePresenceUntil: Date?
     private var isApplying = false
+    private var didRecordInitialDisplays = false
+    private var knownDisplayIDs: Set<String> = []
+    private var lastSeen: [String: ExternalDisplay] = [:]
+    private var missingSince: [String: Date] = [:]
+    private var dropQualified: Set<String> = []
+    private var ignoreUntil: [String: Date] = [:]
+
+    private let assignmentsKey = "displayProfileMap"
 
     var selectedDisplay: ExternalDisplay? {
         displays.first { $0.id == selectedDisplayID } ?? displays.first
@@ -52,6 +58,7 @@ final class AppState: ObservableObject {
             selectedProfileBytes = match.1
             selectedProfileSummary = EDIDParser.summarize(match.1)
         }
+        assignments = UserDefaults.standard.dictionary(forKey: assignmentsKey) as? [String: String] ?? [:]
         NSLog("ForceEDID: AppState init (no display / DCP / disk in body)")
     }
 
@@ -114,13 +121,37 @@ final class AppState: ObservableObject {
 
     func refreshDisplays() {
         displays = DisplayService.listExternalDisplays()
+        for display in displays {
+            lastSeen[display.id] = display
+            lastSeen[display.name] = display
+        }
         if selectedDisplayID == nil || !displays.contains(where: { $0.id == selectedDisplayID }) {
-            if let remembered = displays.first(where: { $0.registryPath == lastDisplayPath }) {
+            if let remembered = displays.first(where: { $0.registryPath == lastDisplayPath || $0.name == lastDisplayPath }) {
                 selectedDisplayID = remembered.id
             } else {
                 selectedDisplayID = displays.first?.id
             }
         }
+        if !didRecordInitialDisplays {
+            knownDisplayIDs = Set(displays.map(\.id))
+            didRecordInitialDisplays = true
+        }
+    }
+
+    func selectDisplay(_ id: ExternalDisplay.ID?) {
+        selectedDisplayID = id
+        guard let display = selectedDisplay, let profileID = assignedProfileID(for: display) else { return }
+        selectProfile(profileID)
+    }
+
+    func assignedProfileID(for display: ExternalDisplay) -> String? {
+        if let uuid = display.uuid, let id = assignments[uuid] { return id }
+        if let id = assignments[display.id] { return id }
+        return assignments[display.name]
+    }
+
+    func assignedProfileName(for display: ExternalDisplay) -> String? {
+        assignedProfileID(for: display).flatMap { id in profiles.first { $0.id == id }?.name }
     }
 
     func reloadLibrary() {
@@ -170,34 +201,53 @@ final class AppState: ObservableObject {
         exportSelected(to: url)
     }
 
-    func applySelected() {
-        guard let profile = selectedProfile else {
+    func applyToSelectedDisplay() {
+        guard let display = selectedDisplay else {
+            status = .error("Choose a display first.")
+            return
+        }
+        guard let profile = selectedProfile, let data = profileData(profile) else {
             status = .error("Choose an EDID first.")
             return
         }
-        let data = selectedProfileBytes ?? EDIDLibrary.shared.data(for: profile)
-        guard let data else {
-            status = .error("Choose an EDID first.")
-            return
-        }
-        apply(data: data, profile: profile)
+        apply(data: data, profile: profile, to: display)
     }
 
-    func resetSelected() {
-        guard !isApplying else { return }
-        isApplying = true
-        status = .working("Resetting to the display’s original EDID…")
-        ignorePresenceUntil = Date().addingTimeInterval(6)
-        do {
-            try DisplayService.reset(display: selectedDisplay)
-            lastAppliedAt = Date()
-            lastAppliedProfileName = "Factory EDID"
-            status = .success("Reset. The picture may flicker while the link renegotiates.")
-            scheduleRefresh()
-        } catch {
-            status = .error(error.localizedDescription)
+    func applyToAllDisplays() {
+        guard let profile = selectedProfile, let data = profileData(profile) else {
+            status = .error("Choose an EDID first.")
+            return
         }
-        isApplying = false
+        apply(data: data, profile: profile, to: nil)
+    }
+
+    func applyAssignedToConnectedDisplays() {
+        let items: [(ExternalDisplay, EDIDProfile, Data)] = displays.compactMap { display in
+            let profileID = assignedProfileID(for: display) ?? (lastProfileID.isEmpty ? nil : lastProfileID)
+            guard let profileID,
+                  let profile = profiles.first(where: { $0.id == profileID }),
+                  let data = EDIDLibrary.shared.data(for: profile)
+            else { return nil }
+            return (display, profile, data)
+        }
+        guard !items.isEmpty else {
+            applyToAllDisplays()
+            return
+        }
+        let uniqueIDs = Set(items.map(\.1.id))
+        if uniqueIDs.count == 1 {
+            apply(data: items[0].2, profile: items[0].1, to: nil)
+            return
+        }
+        applyEach(items, reason: "Applied each display’s assigned EDID.")
+    }
+
+    func resetSelectedDisplay() {
+        reset(display: selectedDisplay, label: selectedDisplay.map { "Reset “\($0.name)”." })
+    }
+
+    func resetAllDisplays() {
+        reset(display: nil, label: "Reset all external displays.")
     }
 
     func captureCurrent() {
@@ -250,7 +300,11 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func apply(data: Data, profile: EDIDProfile, reason: String? = nil) {
+    private func profileData(_ profile: EDIDProfile) -> Data? {
+        selectedProfileBytes ?? EDIDLibrary.shared.data(for: profile)
+    }
+
+    private func apply(data: Data, profile: EDIDProfile, to display: ExternalDisplay?, reason: String? = nil) {
         guard !isApplying else { return }
         guard DisplayService.hasExternalDisplay else {
             status = .warning("No external display connected. Nothing was sent — connect the ATEN receiver first.")
@@ -258,14 +312,14 @@ final class AppState: ObservableObject {
         }
         isApplying = true
         status = .working("Injecting “\(profile.name)”… the ATEN link may blink.")
-        ignorePresenceUntil = Date().addingTimeInterval(6)
+        markIgnore(display)
         do {
-            try DisplayService.apply(edid: data, to: nil)
-            lastProfileID = profile.id
-            lastDisplayPath = selectedDisplay?.registryPath ?? lastDisplayPath
+            try DisplayService.apply(edid: data, to: display)
+            remember(profile: profile, displays: display.map { [$0] } ?? displays)
             lastAppliedAt = Date()
             lastAppliedProfileName = profile.name
-            status = .success(reason ?? "Applied “\(profile.name)”. If the picture drops, wait a second — the extender is renegotiating.")
+            let target = display?.name ?? (displays.count == 1 ? displays[0].name : "all \(displays.count) displays")
+            status = .success(reason ?? "Applied “\(profile.name)” to \(target). If the picture drops, wait a second — the extender is renegotiating.")
             scheduleRefresh()
         } catch {
             status = .error(error.localizedDescription)
@@ -273,41 +327,152 @@ final class AppState: ObservableObject {
         isApplying = false
     }
 
-    private func applyLastUsed(reason: String) {
-        guard let profile = profiles.first(where: { $0.id == lastProfileID }),
+    private func applyEach(_ items: [(ExternalDisplay, EDIDProfile, Data)], reason: String) {
+        guard !isApplying else { return }
+        guard DisplayService.hasExternalDisplay else {
+            status = .warning("No external display connected. Nothing was sent — connect the ATEN receiver first.")
+            return
+        }
+        isApplying = true
+        var applied: [String] = []
+        var failed: [String] = []
+        for (display, profile, data) in items {
+            markIgnore(display)
+            do {
+                try DisplayService.apply(edid: data, to: display)
+                remember(profile: profile, displays: [display])
+                applied.append("\(display.name) ← \(profile.name)")
+            } catch {
+                failed.append("\(display.name): \(error.localizedDescription)")
+            }
+        }
+        lastAppliedAt = Date()
+        lastAppliedProfileName = applied.joined(separator: ", ")
+        if failed.isEmpty {
+            status = .success(reason)
+        } else if applied.isEmpty {
+            status = .error(failed.joined(separator: " "))
+        } else {
+            status = .warning("Applied to \(applied.joined(separator: "; ")). Failed: \(failed.joined(separator: " "))")
+        }
+        scheduleRefresh()
+        isApplying = false
+    }
+
+    private func applyAssigned(to display: ExternalDisplay, reason: String) {
+        let profileID = assignedProfileID(for: display) ?? (lastProfileID.isEmpty ? nil : lastProfileID)
+        guard let profileID,
+              let profile = profiles.first(where: { $0.id == profileID }),
               let data = EDIDLibrary.shared.data(for: profile)
         else { return }
-        apply(data: data, profile: profile, reason: reason)
+        apply(data: data, profile: profile, to: display, reason: reason)
+    }
+
+    private func reset(display: ExternalDisplay?, label: String?) {
+        guard !isApplying else { return }
+        isApplying = true
+        status = .working("Resetting to the display’s original EDID…")
+        markIgnore(display)
+        do {
+            try DisplayService.reset(display: display)
+            lastAppliedAt = Date()
+            lastAppliedProfileName = "Factory EDID"
+            status = .success((label ?? "Reset.") + " The picture may flicker while the link renegotiates.")
+            scheduleRefresh()
+        } catch {
+            status = .error(error.localizedDescription)
+        }
+        isApplying = false
+    }
+
+    private func remember(profile: EDIDProfile, displays: [ExternalDisplay]) {
+        lastProfileID = profile.id
+        if let first = displays.first {
+            lastDisplayPath = first.registryPath
+        }
+        for display in displays {
+            assignments[display.id] = profile.id
+            assignments[display.name] = profile.id
+            if let uuid = display.uuid {
+                assignments[uuid] = profile.id
+            }
+        }
+        UserDefaults.standard.set(assignments, forKey: assignmentsKey)
+    }
+
+    private func markIgnore(_ display: ExternalDisplay?) {
+        let until = Date().addingTimeInterval(6)
+        let targets = display.map { [$0] } ?? displays
+        for item in targets {
+            ignoreUntil[item.id] = until
+            ignoreUntil[item.name] = until
+        }
+    }
+
+    private func isIgnored(_ key: String, now: Date) -> Bool {
+        guard let until = ignoreUntil[key] else { return false }
+        if now < until { return true }
+        ignoreUntil[key] = nil
+        return false
     }
 
     private func handleScreenChange() {
+        let previous = displays
         refreshDisplays()
-        let present = DisplayService.hasExternalDisplay
         let now = Date()
-        if let ignorePresenceUntil, now < ignorePresenceUntil {
-            if present { clearDropWatch() }
-            return
-        }
+        let currentIDs = Set(displays.map(\.id))
 
-        if present {
-            let shouldRelock = dropQualified && autoReapply && !lastProfileID.isEmpty
-            clearDropWatch()
-            if shouldRelock {
-                applyLastUsed(reason: "Display was gone longer than \(reapplyAfterDropSeconds)s — reapplied the locked EDID.")
+        let gone = previous.filter { !currentIDs.contains($0.id) }
+        let appeared = displays.filter { !knownDisplayIDs.contains($0.id) }
+
+        for display in gone where !isIgnored(display.id, now: now) && !isIgnored(display.name, now: now) {
+            if missingSince[display.id] == nil {
+                missingSince[display.id] = now
+                missingSince[display.name] = now
+                status = .working("“\(display.name)” dropped. If it stays gone for \(reapplyAfterDropSeconds)s, reconnect will lock its EDID automatically.")
             }
-            return
         }
 
-        // No external screen: never talk to DCP. Just remember that a drop happened.
-        guard autoReapply, !lastProfileID.isEmpty else { return }
+        for display in appeared {
+            if isIgnored(display.id, now: now) || isIgnored(display.name, now: now) {
+                clearDrop(for: display)
+                continue
+            }
+            let qualified = isQualifiedDrop(display)
+            clearDrop(for: display)
+            if qualified && autoReapply {
+                applyAssigned(
+                    to: display,
+                    reason: "“\(display.name)” was gone longer than \(reapplyAfterDropSeconds)s — reapplied its locked EDID."
+                )
+            }
+        }
 
-        if displayMissingSince == nil {
-            displayMissingSince = now
-            secondsDisplayHasBeenGone = 0
-            waitingToRelock = false
-            dropQualified = false
-            status = .working("Display dropped. If it stays gone for \(reapplyAfterDropSeconds)s, the next reconnect will lock EDID automatically.")
+        knownDisplayIDs = currentIDs
+        if gone.contains(where: { missingSince[$0.id] != nil }) {
             startDropWatch()
+        }
+        if missingSince.isEmpty {
+            waitingToRelock = false
+            secondsDisplayHasBeenGone = 0
+        }
+    }
+
+    private func isQualifiedDrop(_ display: ExternalDisplay) -> Bool {
+        if dropQualified.contains(display.id) || dropQualified.contains(display.name) { return true }
+        return dropQualified.contains { key in
+            lastSeen[key]?.name == display.name
+        }
+    }
+
+    private func clearDrop(for display: ExternalDisplay) {
+        missingSince[display.id] = nil
+        missingSince[display.name] = nil
+        dropQualified.remove(display.id)
+        dropQualified.remove(display.name)
+        if let uuid = display.uuid {
+            missingSince[uuid] = nil
+            dropQualified.remove(uuid)
         }
     }
 
@@ -318,24 +483,34 @@ final class AppState: ObservableObject {
             try? await Task.sleep(for: .seconds(seconds))
             guard let self, !Task.isCancelled else { return }
             self.refreshDisplays()
-            if self.displays.isEmpty {
-                self.dropQualified = true
+            let currentIDs = Set(self.displays.map(\.id))
+            let currentNames = Set(self.displays.map(\.name))
+            var stillGone: [String] = []
+            for (key, _) in self.missingSince {
+                let display = self.lastSeen[key]
+                let idGone = display.map { !currentIDs.contains($0.id) } ?? !currentIDs.contains(key)
+                let nameGone = display.map { !currentNames.contains($0.name) } ?? !currentNames.contains(key)
+                if idGone && nameGone {
+                    self.dropQualified.insert(key)
+                    if let display {
+                        self.dropQualified.insert(display.id)
+                        self.dropQualified.insert(display.name)
+                    }
+                    stillGone.append(display?.name ?? key)
+                } else {
+                    self.missingSince[key] = nil
+                }
+            }
+            if stillGone.isEmpty {
+                self.waitingToRelock = false
+                self.secondsDisplayHasBeenGone = 0
+            } else {
                 self.waitingToRelock = true
                 self.secondsDisplayHasBeenGone = seconds
-                self.status = .warning("Display has been gone for \(seconds)s. When it returns, the last EDID will be applied automatically.")
-            } else {
-                self.clearDropWatch()
+                let names = Array(Set(stillGone)).sorted().joined(separator: ", ")
+                self.status = .warning("\(names) gone for \(seconds)s. When \(stillGone.count == 1 ? "it returns" : "they return"), the locked EDID will be applied automatically.")
             }
         }
-    }
-
-    private func clearDropWatch() {
-        dropWatchTask?.cancel()
-        dropWatchTask = nil
-        displayMissingSince = nil
-        dropQualified = false
-        waitingToRelock = false
-        secondsDisplayHasBeenGone = 0
     }
 
     private func scheduleRefresh() {

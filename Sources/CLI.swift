@@ -13,12 +13,12 @@ enum CLI {
                 try list()
             case "--apply":
                 guard args.count >= 2 else { throw CLIError.usage }
-                try apply(path: args[1])
+                try apply(path: args[1], displayName: optionValue("--display", in: args))
             case "--reset":
-                try reset()
+                try reset(displayName: optionValue("--display", in: args))
             case "--capture":
                 guard args.count >= 2 else { throw CLIError.usage }
-                try capture(path: args[1])
+                try capture(path: args[1], displayName: optionValue("--display", in: args))
             case "--self-test":
                 try selfTest()
             default:
@@ -31,40 +31,65 @@ enum CLI {
         }
     }
 
+    private static func optionValue(_ flag: String, in args: [String]) -> String? {
+        guard let index = args.firstIndex(of: flag), args.indices.contains(index + 1) else { return nil }
+        return args[index + 1]
+    }
+
+    private static func resolveDisplay(named name: String?) throws -> ExternalDisplay? {
+        let displays = DisplayService.listExternalDisplays()
+        guard let name else { return nil }
+        let needle = name.lowercased()
+        if let match = displays.first(where: { $0.name.lowercased() == needle })
+            ?? displays.first(where: { $0.name.lowercased().contains(needle) }) {
+            return match
+        }
+        throw ForceEDIDError.couldNotMatchDisplay(name)
+    }
+
     private static func list() throws {
         let displays = DisplayService.listExternalDisplays()
         guard !displays.isEmpty else { throw ForceEDIDError.noExternalDisplays }
         for display in displays {
-            let summary = display.currentEDID.map(EDIDParser.summarize)
-            print("\(display.name)")
+            print(display.name)
+            print("  id: \(display.id)")
             print("  location: \(display.location)")
-            print("  path: \(display.registryPath)")
-            if let summary {
-                print("  edid: \(summary.productName) · \(summary.preferredMode) · \(summary.byteCount) bytes")
+            if let uuid = display.uuid {
+                print("  uuid: \(uuid)")
             }
         }
     }
 
-    private static func apply(path: String) throws {
+    private static func apply(path: String, displayName: String?) throws {
         let url = URL(fileURLWithPath: path)
         let data = try Data(contentsOf: url)
-        try DisplayService.apply(edid: data, to: nil)
-        print("Applied \(url.lastPathComponent) to all external displays.")
-    }
-
-    private static func reset() throws {
-        try DisplayService.reset(display: nil)
-        print("Reset all external displays to their original EDID.")
-    }
-
-    private static func capture(path: String) throws {
-        guard let display = DisplayService.listExternalDisplays().first else {
-            throw ForceEDIDError.noExternalDisplays
+        let display = try resolveDisplay(named: displayName)
+        try DisplayService.apply(edid: data, to: display)
+        if let display {
+            print("Applied \(url.lastPathComponent) to \(display.name).")
+        } else {
+            print("Applied \(url.lastPathComponent) to all external displays.")
         }
+    }
+
+    private static func reset(displayName: String?) throws {
+        let display = try resolveDisplay(named: displayName)
+        try DisplayService.reset(display: display)
+        if let display {
+            print("Reset \(display.name) to its original EDID.")
+        } else {
+            print("Reset all external displays to their original EDID.")
+        }
+    }
+
+    private static func capture(path: String, displayName: String?) throws {
+        let display = try resolveDisplay(named: displayName)
+            ?? DisplayService.listExternalDisplays().first
+        guard let display else { throw ForceEDIDError.noExternalDisplays }
         let data = try DisplayService.captureEDID(from: display)
         let url = URL(fileURLWithPath: path)
         try data.write(to: url)
-        print("Wrote \(data.count) bytes to \(url.path)")
+        print("Wrote \(data.count) bytes from \(display.name) to \(url.path)")
     }
 
     private static func selfTest() throws {
@@ -90,11 +115,12 @@ enum CLI {
     Usage:
       ForceEDID
       ForceEDID --list
-      ForceEDID --apply <file.bin>
-      ForceEDID --reset
-      ForceEDID --capture <file.bin>
+      ForceEDID --apply <file.bin> [--display <name>]
+      ForceEDID --reset [--display <name>]
+      ForceEDID --capture <file.bin> [--display <name>]
 
     With no arguments the windowed app opens.
+    Without --display, apply and reset target every external display.
     """
 }
 
@@ -102,6 +128,6 @@ private enum CLIError: LocalizedError {
     case usage
 
     var errorDescription: String? {
-        "Usage: ForceEDID [--list | --apply <file.bin> | --reset | --capture <file.bin>]"
+        "Usage: ForceEDID [--list | --apply <file.bin> [--display <name>] | --reset [--display <name>] | --capture <file.bin> [--display <name>]]"
     }
 }

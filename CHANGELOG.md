@@ -8,6 +8,13 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Bump `AppInfo.version` and `AppInfo.build` in `Sources/AppInfo.swift` for every release,
 add an entry here, then run `./build.sh`.
 
+## [1.3.0] - 2026-09-10
+
+### Added
+
+- Each external display can have its own EDID. **Apply to this display** locks only the selected screen; **Apply to all** still sends the same EDID to every external screen.
+- Auto-reapply tracks displays individually. If one of several monitors drops long enough, only that screen is locked again when it comes back.
+
 ## [1.2.1] - 2026-09-10
 
 ### Added
