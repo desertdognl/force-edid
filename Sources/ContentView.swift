@@ -27,7 +27,7 @@ struct ContentView: View {
             Button("Apply") { state.applyToSelectedDisplay() }
         } message: {
             if let name = state.selectedDisplay?.name, let profile = state.selectedProfile?.name {
-                Text("Apply “\(profile)” to \(name) only. The ATEN link may blink while the extender renegotiates.")
+                Text("Apply “\(profile)” to \(name) only. On Apple Silicon the link may blink. On Intel, macOS asks for your password and you should unplug and replug the display.")
             } else {
                 Text("The ATEN link may blink while the extender renegotiates. That is expected.")
             }
@@ -37,7 +37,7 @@ struct ContentView: View {
             Button("Apply to all") { state.applyToAllDisplays() }
         } message: {
             if let profile = state.selectedProfile?.name {
-                Text("Apply “\(profile)” to every external display. Each link may blink once.")
+                Text("Apply “\(profile)” to every external display. On Apple Silicon each link may blink. On Intel, macOS asks for your password once.")
             } else {
                 Text("Every external display will receive this EDID.")
             }
@@ -182,17 +182,17 @@ struct ContentView: View {
                     Label("Apply to this display", systemImage: "lock.fill")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(state.selectedProfile == nil || state.selectedDisplay == nil || !IOAVBridge.isAppleSilicon)
+                .disabled(state.selectedProfile == nil || state.selectedDisplay == nil)
 
                 Button("Apply to all") { confirmApplyAll = true }
-                    .disabled(state.selectedProfile == nil || state.displays.isEmpty || !IOAVBridge.isAppleSilicon)
+                    .disabled(state.selectedProfile == nil || state.displays.isEmpty)
             }
 
             HStack(spacing: 8) {
                 Button("Reset this display") { state.resetSelectedDisplay() }
-                    .disabled(state.selectedDisplay == nil || !IOAVBridge.isAppleSilicon)
+                    .disabled(state.selectedDisplay == nil)
                 Button("Reset all") { state.resetAllDisplays() }
-                    .disabled(state.displays.isEmpty || !IOAVBridge.isAppleSilicon)
+                    .disabled(state.displays.isEmpty)
             }
         }
         .padding(14)

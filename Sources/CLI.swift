@@ -108,7 +108,7 @@ enum CLI {
     }
 
     private static let helpText = """
-    Force EDID \(AppInfo.versionLabel) — lock a display EDID on Apple Silicon
+    Force EDID \(AppInfo.versionLabel) — lock a display EDID on Apple Silicon and Intel
     Made by \(AppInfo.maker) — \(AppInfo.makerURL.absoluteString)
 
 
@@ -121,6 +121,7 @@ enum CLI {
 
     With no arguments the windowed app opens.
     Without --display, apply and reset target every external display.
+    Apple Silicon injects a virtual EDID. Intel writes /Library/Displays overrides (admin password).
     """
 }
 

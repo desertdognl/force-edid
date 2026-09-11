@@ -63,11 +63,13 @@ enum ForceEDIDError: LocalizedError {
     case applyFailed(Int32)
     case resetFailed(Int32)
     case captureFailed
+    case administratorCancelled
+    case overrideFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .notAppleSilicon:
-            return "This app only injects EDID on Apple Silicon Macs. Intel Macs use Display Override plists instead."
+            return "EDID inject is not available on this Mac."
         case .noExternalDisplays:
             return "No external display services were found. Connect the ATEN receiver and try Refresh."
         case .displayNotFound:
@@ -84,6 +86,12 @@ enum ForceEDIDError: LocalizedError {
             return "Reset failed (IOReturn 0x\(String(code, radix: 16)))."
         case .captureFailed:
             return "Could not read the current EDID from that display."
+        case .administratorCancelled:
+            return "Administrator access was cancelled. Intel overrides need your password to write to /Library/Displays."
+        case .overrideFailed(let message):
+            return message.isEmpty
+                ? "Could not write the Intel display override."
+                : "Could not write the Intel display override: \(message)"
         }
     }
 }

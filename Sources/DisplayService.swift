@@ -32,25 +32,34 @@ enum DisplayService {
 
     static func apply(edid: Data, to display: ExternalDisplay?) throws {
         try requireExternalDisplay()
-        guard IOAVBridge.isAppleSilicon else { throw ForceEDIDError.notAppleSilicon }
         guard EDIDParser.isValid(edid) else { throw ForceEDIDError.invalidEDID }
-        try withTargetedAVServices(display) { av in
-            let result = IOAVBridge.apply(edid: edid, to: av)
-            guard result == kIOReturnSuccess else { throw ForceEDIDError.applyFailed(result) }
+        if IOAVBridge.isAppleSilicon {
+            try withTargetedAVServices(display) { av in
+                let result = IOAVBridge.apply(edid: edid, to: av)
+                guard result == kIOReturnSuccess else { throw ForceEDIDError.applyFailed(result) }
+            }
+        } else {
+            try IntelOverride.apply(edid: edid, to: display)
         }
     }
 
     static func reset(display: ExternalDisplay?) throws {
         try requireExternalDisplay()
-        guard IOAVBridge.isAppleSilicon else { throw ForceEDIDError.notAppleSilicon }
-        try withTargetedAVServices(display) { av in
-            let result = IOAVBridge.reset(av)
-            guard result == kIOReturnSuccess else { throw ForceEDIDError.resetFailed(result) }
+        if IOAVBridge.isAppleSilicon {
+            try withTargetedAVServices(display) { av in
+                let result = IOAVBridge.reset(av)
+                guard result == kIOReturnSuccess else { throw ForceEDIDError.resetFailed(result) }
+            }
+        } else {
+            try IntelOverride.reset(display: display)
         }
     }
 
     static func captureEDID(from display: ExternalDisplay) throws -> Data {
         try requireExternalDisplay()
+        if !IOAVBridge.isAppleSilicon {
+            return try IntelOverride.captureEDID(from: display)
+        }
         var captured: Data?
         try withTargetedAVServices(display) { av in
             if captured == nil, let data = IOAVBridge.copyEDID(from: av), data.count >= 128 {
@@ -165,7 +174,7 @@ enum DisplayService {
             guard ioClassName(entry) == "DCPAVServiceProxy" else { continue }
             let location = stringProperty("Location", from: entry) ?? "Unknown"
             guard location != "Embedded" else { continue }
-            guard let av = IOAVServiceCreateWithService(kCFAllocatorDefault, entry) else { continue }
+            guard let av = IOAVBridge.createWithService(entry) else { continue }
             matches.append(AVMatch(av: av, identity: lastIdentity, productName: lastProductName))
         }
 

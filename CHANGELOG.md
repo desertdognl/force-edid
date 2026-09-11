@@ -8,6 +8,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Bump `AppInfo.version` and `AppInfo.build` in `Sources/AppInfo.swift` for every release,
 add an entry here, then run `./build.sh`.
 
+## [1.4.0] - 2026-09-11
+
+### Added
+
+- Universal Mac app (Apple Silicon **and** Intel). Intel uses `/Library/Displays` override plists (administrator password, then unplug/replug). Apple Silicon still injects via the display coprocessor.
+
 ## [1.3.0] - 2026-09-10
 
 ### Added

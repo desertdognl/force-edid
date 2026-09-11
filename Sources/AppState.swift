@@ -311,7 +311,11 @@ final class AppState: ObservableObject {
             return
         }
         isApplying = true
-        status = .working("Injecting “\(profile.name)”… the ATEN link may blink.")
+        status = .working(
+            IOAVBridge.isAppleSilicon
+                ? "Injecting “\(profile.name)”… the ATEN link may blink."
+                : "Writing display override for “\(profile.name)”… macOS may ask for your password."
+        )
         markIgnore(display)
         do {
             try DisplayService.apply(edid: data, to: display)
@@ -319,12 +323,19 @@ final class AppState: ObservableObject {
             lastAppliedAt = Date()
             lastAppliedProfileName = profile.name
             let target = display?.name ?? (displays.count == 1 ? displays[0].name : "all \(displays.count) displays")
-            status = .success(reason ?? "Applied “\(profile.name)” to \(target). If the picture drops, wait a second — the extender is renegotiating.")
+            status = .success(reason ?? applySuccessText(profile: profile.name, target: target))
             scheduleRefresh()
         } catch {
             status = .error(error.localizedDescription)
         }
         isApplying = false
+    }
+
+    private func applySuccessText(profile: String, target: String) -> String {
+        if IOAVBridge.isAppleSilicon {
+            return "Applied “\(profile)” to \(target). If the picture drops, wait a second — the extender is renegotiating."
+        }
+        return "Wrote override for \(target). Unplug and replug the display (or log out). It stays until you Reset."
     }
 
     private func applyEach(_ items: [(ExternalDisplay, EDIDProfile, Data)], reason: String) {
@@ -377,7 +388,13 @@ final class AppState: ObservableObject {
             try DisplayService.reset(display: display)
             lastAppliedAt = Date()
             lastAppliedProfileName = "Factory EDID"
-            status = .success((label ?? "Reset.") + " The picture may flicker while the link renegotiates.")
+            status = .success(
+                (label ?? "Reset.") + (
+                    IOAVBridge.isAppleSilicon
+                        ? " The picture may flicker while the link renegotiates."
+                        : " Unplug and replug the display to load the factory EDID."
+                )
+            )
             scheduleRefresh()
         } catch {
             status = .error(error.localizedDescription)
