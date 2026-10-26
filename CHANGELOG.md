@@ -8,6 +8,12 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Bump `AppInfo.version` and `AppInfo.build` in `Sources/AppInfo.swift` for every release,
 add an entry here, then run `./build.sh`.
 
+## [1.5.2] - 2026-10-26
+
+### Added
+
+- Checks GitHub for a newer release: at launch, via **Check for Updates…** (app menu and menu bar), and every Monday at 09:00 local time (with catch-up if the app was closed then).
+
 ## [1.5.1] - 2026-10-26
 
 ### Fixed

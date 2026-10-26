@@ -125,6 +125,27 @@ enum CLI {
             print("\(profile.name): \(data.count) bytes · \(summary.preferredMode) · \(summary.colorSpace) · \(mark)")
             if !issues.isEmpty { failed += 1 }
         }
+        // Update-check helpers (no network).
+        if !UpdateChecker.isVersion("1.5.2", greaterThan: "1.5.1")
+            || UpdateChecker.isVersion("1.5.1", greaterThan: "1.5.2")
+            || UpdateChecker.normalizeVersion("v1.5.2") != "1.5.2" {
+            print("Update version compare: FAIL")
+            failed += 1
+        } else {
+            print("Update version compare: OK")
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? .gmt
+        let mondayNine = calendar.date(from: DateComponents(year: 2026, month: 10, day: 26, hour: 9, minute: 0))!
+        let nextMonday = UpdateChecker.nextMondayNineAM(after: mondayNine, calendar: calendar)
+        let expected = calendar.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 9, minute: 0))!
+        if abs(nextMonday.timeIntervalSince(expected)) > 1 {
+            print("Weekly schedule helpers: FAIL (\(nextMonday) ≠ \(expected))")
+            failed += 1
+        } else {
+            print("Weekly schedule helpers: OK")
+        }
+
         guard failed == 0 else {
             fputs("Self-test failed.\n", stderr)
             exit(1)

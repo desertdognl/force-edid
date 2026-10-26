@@ -9,6 +9,9 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let update = state.availableUpdate {
+                updateBanner(update)
+            }
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 displaysColumn
@@ -75,10 +78,38 @@ struct ContentView: View {
 
             Spacer(minLength: 8)
 
+            if state.isCheckingForUpdate {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
             siliconBadge
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    private func updateBanner(_ update: GitHubRelease) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.app")
+                .foregroundStyle(Color.accentColor)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Update available: v\(update.version)")
+                    .font(.caption.weight(.semibold))
+                Text("You’re on \(AppInfo.versionLabel). Download the latest from GitHub.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Button("Download") { state.openAvailableUpdate() }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            Button("Later") { state.dismissAvailableUpdate() }
+                .controlSize(.small)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color.accentColor.opacity(0.08))
     }
 
     private var appMark: some View {

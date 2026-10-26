@@ -15,6 +15,8 @@ final class AppState: ObservableObject {
     @Published var lastAppliedAt: Date?
     @Published var lastAppliedProfileName: String?
     @Published var assignments: [String: String] = [:]
+    @Published var availableUpdate: GitHubRelease?
+    @Published var isCheckingForUpdate = false
 
     @AppStorage("autoReapply") var autoReapply = true
     @AppStorage("reapplyAfterDropSeconds") var reapplyAfterDropSeconds = 3
@@ -27,6 +29,7 @@ final class AppState: ObservableObject {
     @Published var opensAtLogin = false
 
     private var dropWatchTask: Task<Void, Never>?
+    private var weeklyUpdateTask: Task<Void, Never>?
     private var didBootstrap = false
     private var cancellables = Set<AnyCancellable>()
     private var isApplying = false
@@ -104,7 +107,90 @@ final class AppState: ObservableObject {
             NSLog("ForceEDID: reading login item status")
             opensAtLogin = SMAppService.mainApp.status == .enabled
             StatusBarController.shared.sync(from: self, enabled: keepInMenuBar)
+
+            // One network check at launch. If Monday 09:00 already passed this week
+            // without a weekly run, count this as the weekly check too.
+            if UpdateChecker.isWeeklyCheckDue() {
+                await checkForUpdates(reason: .weekly)
+            } else {
+                await checkForUpdates(reason: .launch)
+            }
+            scheduleWeeklyUpdateChecks()
+
             NSLog("ForceEDID: startup done")
+        }
+    }
+
+    enum UpdateCheckReason {
+        case launch
+        case manual
+        case weekly
+    }
+
+    func checkForUpdates(reason: UpdateCheckReason) async {
+        if reason == .manual {
+            isCheckingForUpdate = true
+            status = .working("Checking GitHub for a newer Force EDID…")
+        }
+        let outcome = await UpdateChecker.fetchLatest()
+        isCheckingForUpdate = false
+
+        switch outcome {
+        case .upToDate(let current):
+            availableUpdate = nil
+            if reason == .manual {
+                status = .success("You’re on the latest version (v\(current)).")
+            }
+            // launch/weekly: stay quiet when current
+        case .updateAvailable(let release):
+            if UpdateChecker.shouldShow(release: release) {
+                availableUpdate = release
+                status = .warning("Update available: v\(release.version). Download from GitHub.")
+            } else if reason == .manual {
+                availableUpdate = release
+                status = .warning("Update available: v\(release.version) (you dismissed this earlier).")
+            }
+        case .failed(let message):
+            availableUpdate = nil
+            if reason == .manual {
+                status = .error("Update check failed: \(message)")
+            } else {
+                NSLog("ForceEDID: update check failed: \(message)")
+            }
+        }
+
+        if reason == .weekly {
+            UpdateChecker.markWeeklyCheckDone()
+        }
+    }
+
+    func checkForUpdatesManual() {
+        Task { await checkForUpdates(reason: .manual) }
+    }
+
+    func openAvailableUpdate() {
+        let url = availableUpdate?.htmlURL ?? AppInfo.githubReleasesURL
+        NSWorkspace.shared.open(url)
+    }
+
+    func dismissAvailableUpdate() {
+        if let version = availableUpdate?.version {
+            UpdateChecker.dismissedVersion = version
+        }
+        availableUpdate = nil
+    }
+
+    private func scheduleWeeklyUpdateChecks() {
+        weeklyUpdateTask?.cancel()
+        weeklyUpdateTask = Task { [weak self] in
+            while !Task.isCancelled {
+                let next = UpdateChecker.nextMondayNineAM()
+                let delay = max(1, next.timeIntervalSinceNow)
+                NSLog("ForceEDID: next weekly update check at \(next)")
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+                await self?.checkForUpdates(reason: .weekly)
+            }
         }
     }
 

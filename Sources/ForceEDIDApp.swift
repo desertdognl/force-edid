@@ -18,6 +18,11 @@ struct ForceEDIDApp: App {
         .defaultSize(width: 840, height: 560)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    state.checkForUpdatesManual()
+                }
+            }
         }
     }
 }

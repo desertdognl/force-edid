@@ -38,6 +38,7 @@ final class StatusBarController {
         menu.addItem(withTitle: "Apply assigned EDIDs", action: #selector(apply), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh displays", action: #selector(refresh), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(withTitle: "Check for Updates…", action: #selector(checkUpdates), keyEquivalent: "")
         menu.addItem(withTitle: "DesertDog", action: #selector(openSite), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
@@ -103,6 +104,11 @@ final class StatusBarController {
 
     @objc private func refresh() {
         state?.refreshDisplays()
+    }
+
+    @objc private func checkUpdates() {
+        showWindow()
+        state?.checkForUpdatesManual()
     }
 
     @objc private func openSite() {

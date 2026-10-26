@@ -80,4 +80,6 @@ Saved EDIDs live in:
 
 See [CHANGELOG.md](CHANGELOG.md). The number in the app comes from `Sources/AppInfo.swift`.
 
+The app checks [GitHub Releases](https://github.com/desertdognl/force-edid/releases) for updates at launch, from **Check for Updates…**, and every Monday at 09:00.
+
 Made by [DesertDog](https://desertdog.nl).
