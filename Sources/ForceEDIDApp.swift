@@ -26,6 +26,7 @@ enum WindowCentering {
     private static var didCenter = false
 
     static func centerIfNeeded() {
+        AppDelegate.shared?.attachWindowDelegate()
         guard !didCenter else { return }
         didCenter = true
         DispatchQueue.main.async {
@@ -37,18 +38,61 @@ enum WindowCentering {
             let x = visible.midX - size.width / 2
             let y = visible.midY - size.height / 2
             window.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+            AppDelegate.shared?.attachWindowDelegate()
         }
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    static weak var shared: AppDelegate?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.shared = self
+        NSApp.setActivationPolicy(.regular)
+        WindowCentering.centerIfNeeded()
+        attachWindowDelegate()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWindowDidBecomeKey(_:)),
+            name: NSWindow.didBecomeKeyNotification,
+            object: nil
+        )
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         let keep = UserDefaults.standard.object(forKey: "keepInMenuBar") as? Bool ?? true
         return !keep
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.regular)
-        WindowCentering.centerIfNeeded()
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        StatusBarController.shared.revealMainWindow()
+        return true
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        let keep = UserDefaults.standard.object(forKey: "keepInMenuBar") as? Bool ?? true
+        if keep {
+            // Hide instead of destroy so the menu bar can reopen the same window.
+            sender.orderOut(nil)
+            return false
+        }
+        return true
+    }
+
+    @objc private func handleWindowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        adopt(window)
+    }
+
+    func attachWindowDelegate() {
+        DispatchQueue.main.async {
+            NSApp.windows.forEach { self.adopt($0) }
+        }
+    }
+
+    private func adopt(_ window: NSWindow) {
+        guard window.styleMask.contains(.titled), window.styleMask.contains(.closable) else { return }
+        guard !(window is NSPanel) else { return }
+        window.delegate = self
     }
 }

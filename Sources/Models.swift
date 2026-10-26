@@ -34,6 +34,7 @@ struct EDIDSummary: Hashable {
     var extensionBlocks: Int
     var byteCount: Int
     var checksumOK: Bool
+    var colorSpace: String
     var warnings: [String]
 }
 

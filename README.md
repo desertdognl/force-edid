@@ -11,10 +11,11 @@ It does **not** turn HDCP on or off. Apple still handles HDCP automatically. A s
 
 1. Open the app (download a [release](https://github.com/desertdognl/force-edid/releases), or `./build.sh` then `open "build/Force EDID.app"`).
 2. **Best quality lock:** plug the display into the Mac directly, click **Capture current EDID**, then reconnect through the ATEN.
-3. Or pick a preset:
-   - **1080p60 HDMI** — most reliable on HDMI Cat6 / HDBaseT-class boxes
-   - **4K30 HDMI 1.4** — typical ATEN 4K ceiling
-   - **4K60 HDMI 2.0** — only if the extender actually carries 18 Gbps
+3. Or pick a preset. All built-in locks are **RGB 4:4:4 with sRGB/Rec.709 primaries** (no YCbCr):
+   - **1920x1080 @ 50 RGB sRGB** — default PAL / 50 Hz ATEN lock
+   - **1920x1080 @ 50 RGB DVI** — same timing without an HDMI color block
+   - **1080p60 RGB sRGB** — typical HDMI Cat6 / HDBaseT
+   - **4K30 RGB sRGB** / **4K60 RGB sRGB** — only if the extender can carry it
 4. Select an external display, pick an EDID, then **Apply to this display**. Use **Apply to all** if every monitor should get the same lock.
 5. **Apple Silicon:** leave **Reapply each display after a drop** on, and enable **Open at login** — the inject is lost at reboot. **Intel:** the override file persists until Reset; still unplug/replug once after Apply.
 

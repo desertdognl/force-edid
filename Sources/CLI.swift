@@ -94,11 +94,36 @@ enum CLI {
 
     private static func selfTest() throws {
         var failed = 0
+        let srgbTargets: [(String, Double, Double)] = [
+            ("R", 0.640, 0.330),
+            ("G", 0.300, 0.600),
+            ("B", 0.150, 0.060),
+            ("W", 0.3127, 0.3290),
+        ]
         for (profile, data) in EDIDGenerator.builtInPresets() {
             let summary = EDIDParser.summarize(data)
             let valid = EDIDParser.isValid(data)
-            print("\(profile.name): \(data.count) bytes · \(summary.preferredMode) · checksum \(summary.checksumOK ? "OK" : "BAD")")
-            if !valid || !summary.checksumOK { failed += 1 }
+            var issues: [String] = []
+            if !valid || !summary.checksumOK { issues.append("checksum/header") }
+            if EDIDParser.claimsYCbCr(data) { issues.append("claims YCbCr") }
+            if !EDIDParser.hasSRGBDefault(data) { issues.append("sRGB bit clear") }
+            if !summary.colorSpace.contains("sRGB") { issues.append("color summary missing sRGB") }
+            if summary.colorSpace.contains("YCbCr") { issues.append("color summary still lists YCbCr") }
+            if let chroma = EDIDParser.chromaticity(data) {
+                let points = [chroma.rx, chroma.ry, chroma.gx, chroma.gy, chroma.bx, chroma.by, chroma.wx, chroma.wy]
+                let pairs = [(points[0], points[1]), (points[2], points[3]), (points[4], points[5]), (points[6], points[7])]
+                for (index, target) in srgbTargets.enumerated() {
+                    let (x, y) = pairs[index]
+                    if abs(x - target.1) > 0.015 || abs(y - target.2) > 0.015 {
+                        issues.append("chroma \(target.0)")
+                    }
+                }
+            } else {
+                issues.append("chroma undecodable")
+            }
+            let mark = issues.isEmpty ? "OK" : "FAIL (\(issues.joined(separator: ", ")))"
+            print("\(profile.name): \(data.count) bytes · \(summary.preferredMode) · \(summary.colorSpace) · \(mark)")
+            if !issues.isEmpty { failed += 1 }
         }
         guard failed == 0 else {
             fputs("Self-test failed.\n", stderr)

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 final class StatusBarController {
@@ -6,6 +7,7 @@ final class StatusBarController {
 
     private var item: NSStatusItem?
     private weak var state: AppState?
+    private var fallbackWindow: NSWindow?
 
     func sync(from state: AppState, enabled: Bool) {
         self.state = state
@@ -31,7 +33,7 @@ final class StatusBarController {
     private func rebuildMenu() {
         guard let item else { return }
         let menu = NSMenu()
-        menu.addItem(withTitle: "Show Force EDID", action: #selector(showWindow), keyEquivalent: "")
+        menu.addItem(withTitle: "Open Force EDID", action: #selector(showWindow), keyEquivalent: "")
         menu.addItem(NSMenuItem.separator())
         menu.addItem(withTitle: "Apply assigned EDIDs", action: #selector(apply), keyEquivalent: "")
         menu.addItem(withTitle: "Refresh displays", action: #selector(refresh), keyEquivalent: "")
@@ -52,11 +54,47 @@ final class StatusBarController {
         item = nil
     }
 
+    func revealMainWindow() {
+        showWindow()
+    }
+
     @objc private func showWindow() {
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows {
-            window.makeKeyAndOrderFront(nil)
+
+        let candidates = NSApp.windows.filter { window in
+            window.styleMask.contains(.titled)
+                && window.styleMask.contains(.closable)
+                && !(window is NSPanel)
         }
+        if let window = candidates.first(where: { $0.isVisible }) ?? candidates.first {
+            if window.isMiniaturized { window.deminiaturize(nil) }
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        openFallbackWindow()
+    }
+
+    private func openFallbackWindow() {
+        guard let state else { return }
+        if let fallbackWindow {
+            fallbackWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        let hosting = NSHostingController(rootView: ContentView().environmentObject(state))
+        let window = NSWindow(contentViewController: hosting)
+        window.title = "Force EDID"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.setContentSize(NSSize(width: 840, height: 560))
+        window.minSize = NSSize(width: 760, height: 500)
+        window.maxSize = NSSize(width: 1100, height: 780)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.delegate = AppDelegate.shared
+        window.makeKeyAndOrderFront(nil)
+        fallbackWindow = window
     }
 
     @objc private func apply() {

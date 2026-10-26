@@ -59,7 +59,10 @@ codesign --force --deep --sign - \
 DIST="$ROOT/dist"
 ZIP="$DIST/Force-EDID-${VERSION}-macos-universal.zip"
 mkdir -p "$DIST"
-rm -f "$ZIP" "$DIST"/Force-EDID-*-macos-arm64.zip
+rm -f "$ZIP"
+setopt +o nomatch
+rm -f "$DIST"/Force-EDID-*-macos-arm64.zip
+setopt -o nomatch
 ditto -c -k --keepParent --norsrc "$APP" "$ZIP"
 
 echo "Built: $APP"

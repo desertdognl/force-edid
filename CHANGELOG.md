@@ -8,6 +8,26 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Bump `AppInfo.version` and `AppInfo.build` in `Sources/AppInfo.swift` for every release,
 add an entry here, then run `./build.sh`.
 
+## [1.5.1] - 2026-10-26
+
+### Fixed
+
+- Preset feature byte was `0x0E`, which still advertised **YCbCr 4:4:4** next to sRGB. Correct RGB-only value is `0x06`.
+- Menu-bar **Apply assigned EDIDs** no longer broadcasts one profile to every screen when several displays share the same assignment.
+- Closing the window with **Menu bar** off now actually quits instead of only hiding.
+- `--self-test` now fails on wrong chromaticity, missing sRGB bit, or any YCbCr claim — the checks that should have caught 1.5.0.
+
+## [1.5.0] - 2026-10-26
+
+### Fixed
+
+- Preset chromaticity was not sRGB (white point and green were wrong), so ColorSync built a weird profile. All presets now advertise **RGB 4:4:4 + sRGB/Rec.709 primaries**, and HDMI variants no longer claim YCbCr in the CTA block.
+- **Open Force EDID** in the menu bar now brings the window back after you close it. Closing hides the window instead of destroying it.
+
+### Added
+
+- Two 1920×1080 @ 50 RGB presets: **RGB sRGB** (HDMI/CEA VIC 31, default) and **RGB DVI** (no HDMI/CTA block).
+
 ## [1.4.0] - 2026-09-11
 
 ### Added

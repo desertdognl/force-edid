@@ -170,6 +170,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         labeled("Name", profile.name)
                         labeled("Mode", summary.preferredMode)
+                        labeled("Color", summary.colorSpace)
                         labeled("File", "\(summary.byteCount) bytes · checksum \(summary.checksumOK ? "OK" : "bad")")
                     }
                 }

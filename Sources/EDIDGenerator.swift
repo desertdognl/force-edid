@@ -24,15 +24,30 @@ enum EDIDGenerator {
         }
     }
 
-    static let defaultPresetID = "preset-1080p50"
+    /// VESA sRGB / Rec.709 primaries with D65 white (10-bit EDID encoding).
+    private static let sRGBChromaticity: [UInt8] = [
+        0xEE, 0x91, 0xA3, 0x54, 0x4C, 0x99, 0x26, 0x0F, 0x50, 0x54,
+    ]
 
-    static func preset(id: String, name: String, note: String, timing: Timing, manufacturer: String = "FCE") -> (EDIDProfile, Data) {
+    static let defaultPresetID = "preset-1080p50-rgb-srgb"
+
+    static func preset(
+        id: String,
+        name: String,
+        note: String,
+        timing: Timing,
+        productID: UInt16,
+        manufacturer: String = "FCE",
+        hdmiVIC: UInt8? = nil,
+        edidName: String
+    ) -> (EDIDProfile, Data) {
         let data = make(
             manufacturer: manufacturer,
-            productID: 0x0001,
-            year: 2024,
-            name: name,
-            timing: timing
+            productID: productID,
+            year: 2026,
+            name: edidName,
+            timing: timing,
+            hdmiVIC: hdmiVIC
         )
         let profile = EDIDProfile(
             id: id,
@@ -46,70 +61,93 @@ enum EDIDGenerator {
     }
 
     static func builtInPresets() -> [(EDIDProfile, Data)] {
-        [
+        let cea1080p50 = Timing(
+            pixelClockMHz: 148.50,
+            hActive: 1920, hBlank: 720, hSyncOffset: 528, hSyncWidth: 44,
+            vActive: 1080, vBlank: 45, vSyncOffset: 4, vSyncWidth: 5,
+            hSizeMM: 598, vSizeMM: 336,
+            positiveHSync: true, positiveVSync: true
+        )
+        return [
             preset(
                 id: defaultPresetID,
-                name: "1920x1080 @ 50",
-                note: "Default lock. CEA 1080p50 — typical for PAL / 50 Hz ATEN links.",
-                timing: Timing(
-                    pixelClockMHz: 148.50,
-                    hActive: 1920, hBlank: 720, hSyncOffset: 528, hSyncWidth: 44,
-                    vActive: 1080, vBlank: 45, vSyncOffset: 4, vSyncWidth: 5,
-                    hSizeMM: 598, vSizeMM: 336,
-                    positiveHSync: true, positiveVSync: true
-                )
+                name: "1920x1080 @ 50 RGB sRGB",
+                note: "Default. CEA 1080p50, RGB 4:4:4, sRGB/Rec.709 primaries. No YCbCr.",
+                timing: cea1080p50,
+                productID: 0x5050,
+                hdmiVIC: 31,
+                edidName: "1080p50 sRGB"
+            ),
+            preset(
+                id: "preset-1080p50-rgb-dvi",
+                name: "1920x1080 @ 50 RGB DVI",
+                note: "Same 1080p50 RGB sRGB without an HDMI/CTA block. Use if the extender mishandles HDMI color.",
+                timing: cea1080p50,
+                productID: 0x5051,
+                edidName: "1080p50 DVI"
             ),
             preset(
                 id: "preset-720p60",
-                name: "720p60 Safe",
-                note: "Lowest-bandwidth fallback if the ATEN link will not stay up.",
+                name: "720p60 RGB sRGB",
+                note: "Lowest-bandwidth RGB fallback if the ATEN link will not stay up.",
                 timing: Timing(
                     pixelClockMHz: 74.25,
                     hActive: 1280, hBlank: 370, hSyncOffset: 110, hSyncWidth: 40,
                     vActive: 720, vBlank: 30, vSyncOffset: 5, vSyncWidth: 5,
                     hSizeMM: 598, vSizeMM: 336,
                     positiveHSync: true, positiveVSync: true
-                )
+                ),
+                productID: 0x0720,
+                hdmiVIC: 4,
+                edidName: "720p60 sRGB"
             ),
             preset(
                 id: "preset-1080p60",
-                name: "1080p60 HDMI",
-                note: "Most reliable lock for HDMI Cat6 / HDBaseT-class ATEN extenders.",
+                name: "1080p60 RGB sRGB",
+                note: "RGB 4:4:4 sRGB lock for HDMI Cat6 / HDBaseT-class ATEN extenders.",
                 timing: Timing(
                     pixelClockMHz: 148.50,
                     hActive: 1920, hBlank: 280, hSyncOffset: 88, hSyncWidth: 44,
                     vActive: 1080, vBlank: 45, vSyncOffset: 4, vSyncWidth: 5,
                     hSizeMM: 598, vSizeMM: 336,
                     positiveHSync: true, positiveVSync: true
-                )
+                ),
+                productID: 0x1060,
+                hdmiVIC: 16,
+                edidName: "1080p60 sRGB"
             ),
             preset(
                 id: "preset-1440p60",
-                name: "1440p60",
-                note: "2560×1440 at 60 Hz. Use only if the extender and cable can carry it.",
+                name: "1440p60 RGB sRGB",
+                note: "2560×1440 at 60 Hz RGB. Use only if the extender and cable can carry it.",
                 timing: Timing(
                     pixelClockMHz: 241.50,
                     hActive: 2560, hBlank: 160, hSyncOffset: 48, hSyncWidth: 32,
                     vActive: 1440, vBlank: 41, vSyncOffset: 3, vSyncWidth: 5,
                     hSizeMM: 598, vSizeMM: 336,
                     positiveHSync: true, positiveVSync: false
-                )
+                ),
+                productID: 0x1440,
+                edidName: "1440p60 sRGB"
             ),
             preset(
                 id: "preset-2160p30",
-                name: "4K30 HDMI 1.4",
-                note: "Typical ATEN HDMI Cat6 ceiling (4K30). Prefer this over 4K60 on those boxes.",
+                name: "4K30 RGB sRGB",
+                note: "Typical ATEN HDMI Cat6 ceiling (4K30 RGB). Prefer this over 4K60 on those boxes.",
                 timing: Timing(
                     pixelClockMHz: 297.00,
                     hActive: 3840, hBlank: 560, hSyncOffset: 176, hSyncWidth: 88,
                     vActive: 2160, vBlank: 90, vSyncOffset: 8, vSyncWidth: 10,
                     hSizeMM: 598, vSizeMM: 336,
                     positiveHSync: true, positiveVSync: true
-                )
+                ),
+                productID: 0x2160,
+                hdmiVIC: 95,
+                edidName: "4K30 sRGB"
             ),
             preset(
                 id: "preset-2160p60",
-                name: "4K60 HDMI 2.0",
+                name: "4K60 RGB sRGB",
                 note: "Needs HDMI 2.0 bandwidth. Will drop on 4K30-only ATEN extenders.",
                 timing: Timing(
                     pixelClockMHz: 594.00,
@@ -117,7 +155,10 @@ enum EDIDGenerator {
                     vActive: 2160, vBlank: 90, vSyncOffset: 8, vSyncWidth: 10,
                     hSizeMM: 598, vSizeMM: 336,
                     positiveHSync: true, positiveVSync: true
-                )
+                ),
+                productID: 0x2161,
+                hdmiVIC: 97,
+                edidName: "4K60 sRGB"
             )
         ]
     }
@@ -127,9 +168,10 @@ enum EDIDGenerator {
         productID: UInt16,
         year: Int,
         name: String,
-        timing: Timing
+        timing: Timing,
+        hdmiVIC: UInt8? = nil
     ) -> Data {
-        var bytes = [UInt8](repeating: 0, count: 128)
+        var bytes = [UInt8](repeating: 0, count: hdmiVIC == nil ? 128 : 256)
         bytes.replaceSubrange(0..<8, with: EDIDParser.header)
         writeManufacturer(&bytes, manufacturer)
         bytes[10] = UInt8(productID & 0xFF)
@@ -137,15 +179,16 @@ enum EDIDGenerator {
         bytes[16] = 1
         bytes[17] = UInt8(max(0, year - 1990))
         bytes[18] = 1
-        bytes[19] = 3
-        bytes[20] = 0x80
+        bytes[19] = 4
+        // Digital, 8-bit. HDMI-a when we include CTA; DVI otherwise.
+        bytes[20] = hdmiVIC == nil ? 0xA1 : 0xA2
         bytes[21] = UInt8(max(1, timing.hSizeMM / 10))
         bytes[22] = UInt8(max(1, timing.vSizeMM / 10))
         bytes[23] = 0x78
-        bytes[24] = 0x0A
-        // sRGB-ish chromaticity
-        let chroma: [UInt8] = [0x0A, 0x0D, 0xC9, 0xA0, 0x57, 0x47, 0x98, 0x27, 0x12, 0x48]
-        bytes.replaceSubrange(25..<35, with: chroma)
+        // Feature Support: preferred timing + sRGB. Bits 3–4 = 00 → RGB 4:4:4 only
+        // (0x0E wrongly set bit 3 and advertised YCbCr 4:4:4).
+        bytes[24] = 0x06
+        bytes.replaceSubrange(25..<35, with: sRGBChromaticity)
         bytes[35] = 0x21
         bytes[36] = 0x08
         bytes[37] = 0x00
@@ -154,9 +197,35 @@ enum EDIDGenerator {
         bytes.replaceSubrange(72..<90, with: nameDescriptor(name))
         bytes.replaceSubrange(90..<108, with: rangeDescriptor(timing))
         bytes.replaceSubrange(108..<126, with: unusedDescriptor())
-        bytes[126] = 0
-        EDIDParser.applyChecksum(&bytes)
+        if let vic = hdmiVIC {
+            bytes[126] = 1
+            EDIDParser.applyChecksum(&bytes, offset: 0)
+            let extensionBlock = ctaExtension(nativeVIC: vic)
+            bytes.replaceSubrange(128..<256, with: extensionBlock)
+        } else {
+            bytes[126] = 0
+            EDIDParser.applyChecksum(&bytes, offset: 0)
+        }
         return Data(bytes)
+    }
+
+    private static func ctaExtension(nativeVIC: UInt8) -> [UInt8] {
+        var block = [UInt8](repeating: 0, count: 128)
+        block[0] = 0x02
+        block[1] = 0x03
+        block[2] = 0x0C
+        // Basic audio, no YCbCr 4:4:4 / 4:2:2 — RGB only.
+        block[3] = 0x40
+        block[4] = 0x41
+        block[5] = nativeVIC | 0x80
+        block[6] = 0x65
+        block[7] = 0x03
+        block[8] = 0x0C
+        block[9] = 0x00
+        block[10] = 0x10
+        block[11] = 0x00
+        EDIDParser.applyChecksum(&block)
+        return block
     }
 
     private static func writeManufacturer(_ bytes: inout [UInt8], _ name: String) {

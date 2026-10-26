@@ -51,6 +51,7 @@ enum EDIDParser {
             extensionBlocks: extensions,
             byteCount: data.count,
             checksumOK: checksum,
+            colorSpace: validHeader ? colorSpace(bytes) : "—",
             warnings: warnings
         )
     }
@@ -102,6 +103,59 @@ enum EDIDParser {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
         return ""
+    }
+
+    private static func colorSpace(_ bytes: [UInt8]) -> String {
+        let srgb = (bytes[24] & 0x04) != 0
+        var parts = ["RGB"]
+        // Feature Support bits 3–4 (digital): 01/10/11 advertise YCbCr.
+        switch bytes[24] & 0x18 {
+        case 0x08: parts.append("YCbCr 4:4:4")
+        case 0x10: parts.append("YCbCr 4:2:2")
+        case 0x18: parts.append("YCbCr 4:4:4"); parts.append("YCbCr 4:2:2")
+        default: break
+        }
+        if bytes.count >= 132, bytes[126] > 0, bytes[128] == 0x02 {
+            if (bytes[131] & 0x20) != 0, !parts.contains("YCbCr 4:4:4") { parts.append("YCbCr 4:4:4") }
+            if (bytes[131] & 0x10) != 0, !parts.contains("YCbCr 4:2:2") { parts.append("YCbCr 4:2:2") }
+        }
+        if srgb { parts.append("sRGB") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// Decodes EDID chromaticity into CIE xy. Used by self-test.
+    static func chromaticity(_ data: Data) -> (rx: Double, ry: Double, gx: Double, gy: Double, bx: Double, by: Double, wx: Double, wy: Double)? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 35 else { return nil }
+        let rg = Int(bytes[25])
+        let bw = Int(bytes[26])
+        func xy(_ hi: Int, _ lo: Int) -> Double { Double((hi << 2) | lo) / 1024.0 }
+        return (
+            xy(Int(bytes[27]), (rg >> 6) & 0x03),
+            xy(Int(bytes[28]), (rg >> 4) & 0x03),
+            xy(Int(bytes[29]), (rg >> 2) & 0x03),
+            xy(Int(bytes[30]), rg & 0x03),
+            xy(Int(bytes[31]), (bw >> 6) & 0x03),
+            xy(Int(bytes[32]), (bw >> 4) & 0x03),
+            xy(Int(bytes[33]), (bw >> 2) & 0x03),
+            xy(Int(bytes[34]), bw & 0x03)
+        )
+    }
+
+    static func claimsYCbCr(_ data: Data) -> Bool {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 25 else { return false }
+        if bytes[24] & 0x18 != 0 { return true }
+        if bytes.count >= 132, bytes[126] > 0, bytes[128] == 0x02, bytes[131] & 0x30 != 0 {
+            return true
+        }
+        return false
+    }
+
+    static func hasSRGBDefault(_ data: Data) -> Bool {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 25 else { return false }
+        return bytes[24] & 0x04 != 0
     }
 
     private static func physicalSize(_ bytes: [UInt8]) -> String {

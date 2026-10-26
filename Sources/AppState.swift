@@ -59,7 +59,25 @@ final class AppState: ObservableObject {
             selectedProfileSummary = EDIDParser.summarize(match.1)
         }
         assignments = UserDefaults.standard.dictionary(forKey: assignmentsKey) as? [String: String] ?? [:]
+        migrateLegacyPresetIDs()
         NSLog("ForceEDID: AppState init (no display / DCP / disk in body)")
+    }
+
+    /// Old default preset id before the RGB/sRGB rebuild.
+    private static let legacyDefaultPresetID = "preset-1080p50"
+
+    private func migrateLegacyPresetIDs() {
+        if lastProfileID == Self.legacyDefaultPresetID {
+            lastProfileID = EDIDGenerator.defaultPresetID
+        }
+        var changed = false
+        for (key, value) in assignments where value == Self.legacyDefaultPresetID {
+            assignments[key] = EDIDGenerator.defaultPresetID
+            changed = true
+        }
+        if changed {
+            UserDefaults.standard.set(assignments, forKey: assignmentsKey)
+        }
     }
 
     func bootstrap() {
@@ -222,6 +240,9 @@ final class AppState: ObservableObject {
     }
 
     func applyAssignedToConnectedDisplays() {
+        // Only the displays that actually have an assignment (or a remembered last
+        // profile). Never fall through to apply(to: nil) — that would push one
+        // EDID onto every external screen, including ones with a different lock.
         let items: [(ExternalDisplay, EDIDProfile, Data)] = displays.compactMap { display in
             let profileID = assignedProfileID(for: display) ?? (lastProfileID.isEmpty ? nil : lastProfileID)
             guard let profileID,
@@ -231,12 +252,7 @@ final class AppState: ObservableObject {
             return (display, profile, data)
         }
         guard !items.isEmpty else {
-            applyToAllDisplays()
-            return
-        }
-        let uniqueIDs = Set(items.map(\.1.id))
-        if uniqueIDs.count == 1 {
-            apply(data: items[0].2, profile: items[0].1, to: nil)
+            status = .warning("No assigned EDID yet. Select a display, pick a preset, and Apply to this display first.")
             return
         }
         applyEach(items, reason: "Applied each display’s assigned EDID.")
