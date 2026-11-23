@@ -233,7 +233,7 @@ struct ContentView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Toggle("Reapply each display after a drop of", isOn: $state.autoReapply)
+                Toggle("Reapply after a drop of", isOn: $state.autoReapply)
                 Stepper(value: $state.reapplyAfterDropSeconds, in: 1...30) {
                     Text("\(state.reapplyAfterDropSeconds) s")
                         .monospacedDigit()
@@ -258,6 +258,36 @@ struct ContentView: View {
             .toggleStyle(.checkbox)
             .controlSize(.small)
 
+            HStack(spacing: 10) {
+                Toggle("Re-lock on schedule", isOn: $state.periodicRelock)
+                    .onChange(of: state.periodicRelock) { _, _ in
+                        state.reschedulePeriodicRelock()
+                    }
+                Stepper(value: $state.periodicRelockHours, in: 1...168) {
+                    Text("every \(state.periodicRelockHours) h")
+                        .monospacedDigit()
+                        .frame(minWidth: 72, alignment: .leading)
+                }
+                .disabled(!state.periodicRelock)
+                .onChange(of: state.periodicRelockHours) { _, _ in
+                    state.reschedulePeriodicRelock()
+                }
+                Text("at")
+                    .foregroundStyle(.secondary)
+                DatePicker(
+                    "",
+                    selection: periodicRelockTime,
+                    displayedComponents: .hourAndMinute
+                )
+                .labelsHidden()
+                .disabled(!state.periodicRelock)
+                .frame(width: 78)
+
+                Toggle("Re-lock after wake", isOn: $state.relockOnWake)
+            }
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+
             HStack(spacing: 6) {
                 Image(systemName: statusSymbol)
                     .foregroundStyle(statusColor)
@@ -268,10 +298,31 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                if state.periodicRelock, let next = state.nextPeriodicRelockAt {
+                    Text("· next re-lock \(next.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    private var periodicRelockTime: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    from: DateComponents(hour: state.periodicRelockHour, minute: state.periodicRelockMinute)
+                ) ?? Date()
+            },
+            set: { date in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                state.periodicRelockHour = parts.hour ?? 9
+                state.periodicRelockMinute = parts.minute ?? 0
+                state.reschedulePeriodicRelock()
+            }
+        )
     }
 
     private func profileRow(_ profile: EDIDProfile) -> some View {

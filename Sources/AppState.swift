@@ -20,16 +20,24 @@ final class AppState: ObservableObject {
 
     @AppStorage("autoReapply") var autoReapply = true
     @AppStorage("reapplyAfterDropSeconds") var reapplyAfterDropSeconds = 3
+    @AppStorage("periodicRelock") var periodicRelock = true
+    @AppStorage("periodicRelockHours") var periodicRelockHours = 12
+    @AppStorage("periodicRelockHour") var periodicRelockHour = 9
+    @AppStorage("periodicRelockMinute") var periodicRelockMinute = 0
+    @AppStorage("relockOnWake") var relockOnWake = true
     @AppStorage("keepInMenuBar") var keepInMenuBar = true
     @AppStorage("lastProfileID") var lastProfileID = ""
     @AppStorage("lastDisplayPath") var lastDisplayPath = ""
     @Published private(set) var secondsDisplayHasBeenGone = 0
     @Published private(set) var waitingToRelock = false
+    @Published private(set) var nextPeriodicRelockAt: Date?
 
     @Published var opensAtLogin = false
 
     private var dropWatchTask: Task<Void, Never>?
     private var weeklyUpdateTask: Task<Void, Never>?
+    private var periodicRelockTask: Task<Void, Never>?
+    private var wakeRelockTask: Task<Void, Never>?
     private var didBootstrap = false
     private var cancellables = Set<AnyCancellable>()
     private var isApplying = false
@@ -116,6 +124,8 @@ final class AppState: ObservableObject {
                 await checkForUpdates(reason: .launch)
             }
             scheduleWeeklyUpdateChecks()
+            startWatchingPowerAndSession()
+            reschedulePeriodicRelock()
 
             NSLog("ForceEDID: startup done")
         }
@@ -195,7 +205,6 @@ final class AppState: ObservableObject {
     }
 
     private func startWatchingScreens() {
-        guard cancellables.isEmpty else { return }
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .debounce(for: .milliseconds(750), scheduler: RunLoop.main)
             .sink { [weak self] _ in
@@ -204,9 +213,95 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
     }
 
+    private func startWatchingPowerAndSession() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.publisher(for: NSWorkspace.didWakeNotification)
+            .sink { [weak self] _ in
+                self?.handleWakeOrUnlock(reason: "Mac woke")
+            }
+            .store(in: &cancellables)
+
+        workspace.publisher(for: NSWorkspace.screensDidWakeNotification)
+            .sink { [weak self] _ in
+                self?.handleWakeOrUnlock(reason: "Screens woke")
+            }
+            .store(in: &cancellables)
+
+        DistributedNotificationCenter.default().publisher(for: Notification.Name("com.apple.screenIsUnlocked"))
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.handleWakeOrUnlock(reason: "Session unlocked")
+            }
+            .store(in: &cancellables)
+    }
+
     func setKeepInMenuBar(_ enabled: Bool) {
         keepInMenuBar = enabled
         StatusBarController.shared.sync(from: self, enabled: enabled)
+    }
+
+    func reschedulePeriodicRelock() {
+        periodicRelockTask?.cancel()
+        periodicRelockTask = nil
+        nextPeriodicRelockAt = nil
+        guard periodicRelock else { return }
+
+        periodicRelockTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let next = KeepAliveSchedule.nextFire(
+                    intervalHours: self.periodicRelockHours,
+                    hour: self.periodicRelockHour,
+                    minute: self.periodicRelockMinute
+                )
+                await MainActor.run { self.nextPeriodicRelockAt = next }
+                let delay = max(1, next.timeIntervalSinceNow)
+                NSLog("ForceEDID: next periodic re-lock at \(next)")
+                try? await Task.sleep(for: .seconds(delay))
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.relockAssignedIfPossible(
+                        reason: "Scheduled re-lock (every \(self.periodicRelockHours)h at \(KeepAliveSchedule.timeLabel(hour: self.periodicRelockHour, minute: self.periodicRelockMinute)))."
+                    )
+                }
+            }
+        }
+    }
+
+    private func handleWakeOrUnlock(reason: String) {
+        guard relockOnWake else { return }
+        wakeRelockTask?.cancel()
+        // Give the display pipeline a moment after sleep/unlock before injecting.
+        wakeRelockTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.relockAssignedIfPossible(reason: "\(reason) — re-locked assigned EDIDs.")
+            }
+        }
+    }
+
+    /// Soft keep-alive: re-inject assigned EDIDs while screens are still present.
+    /// Does not poll the display coprocessor for signal health — only SetVirtualEDIDMode.
+    private func relockAssignedIfPossible(reason: String) {
+        refreshDisplays()
+        guard DisplayService.hasExternalDisplay else {
+            NSLog("ForceEDID: skip keep-alive — no external display")
+            return
+        }
+        let items: [(ExternalDisplay, EDIDProfile, Data)] = displays.compactMap { display in
+            let profileID = assignedProfileID(for: display) ?? (lastProfileID.isEmpty ? nil : lastProfileID)
+            guard let profileID,
+                  let profile = profiles.first(where: { $0.id == profileID }),
+                  let data = EDIDLibrary.shared.data(for: profile)
+            else { return nil }
+            return (display, profile, data)
+        }
+        guard !items.isEmpty else {
+            NSLog("ForceEDID: skip keep-alive — nothing assigned yet")
+            return
+        }
+        applyEach(items, reason: reason)
     }
 
     func setOpensAtLogin(_ enabled: Bool) {

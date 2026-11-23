@@ -15,7 +15,7 @@ struct ForceEDIDApp: App {
             ContentView()
                 .environmentObject(state)
         }
-        .defaultSize(width: 840, height: 560)
+        .defaultSize(width: 860, height: 600)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .appInfo) {
@@ -36,9 +36,9 @@ enum WindowCentering {
         didCenter = true
         DispatchQueue.main.async {
             guard let window = NSApp.windows.first(where: { $0.canBecomeMain }) ?? NSApp.windows.first else { return }
-            let size = NSSize(width: 840, height: 560)
-            window.minSize = NSSize(width: 760, height: 500)
-            window.maxSize = NSSize(width: 1100, height: 780)
+            let size = NSSize(width: 860, height: 600)
+            window.minSize = NSSize(width: 780, height: 540)
+            window.maxSize = NSSize(width: 1100, height: 820)
             let visible = (window.screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
             let x = visible.midX - size.width / 2
             let y = visible.midY - size.height / 2

@@ -17,7 +17,7 @@ It does **not** turn HDCP on or off. Apple still handles HDCP automatically. A s
    - **1080p60 RGB sRGB** — typical HDMI Cat6 / HDBaseT
    - **4K30 RGB sRGB** / **4K60 RGB sRGB** — only if the extender can carry it
 4. Select an external display, pick an EDID, then **Apply to this display**. Use **Apply to all** if every monitor should get the same lock.
-5. **Apple Silicon:** leave **Reapply each display after a drop** on, and enable **Open at login** — the inject is lost at reboot. **Intel:** the override file persists until Reset; still unplug/replug once after Apply.
+5. **Apple Silicon:** leave **Reapply after a drop** on, and enable **Open at login** — the inject is lost at reboot. For SDI/vMix (or any link that goes black while macOS still sees the display), also enable **Re-lock on schedule** and/or **Re-lock after wake**. **Intel:** the override file persists until Reset; still unplug/replug once after Apply.
 
 The picture may blink once. That is the link renegotiating with the locked EDID.
 
@@ -32,9 +32,12 @@ If you only have the extender in the path, capture anyway — it is better than 
 
 ## Install
 
-Download **Force EDID** from [Releases](https://github.com/desertdognl/force-edid/releases). The zip contains a universal `Force EDID.app` (Apple Silicon and Intel).
+Download **Force EDID** from [Releases](https://github.com/desertdognl/force-edid/releases).
 
-The first time you open it, macOS may warn that the app is unsigned. Right-click the app, choose **Open**, then confirm.
+- **Installer (preferred):** `Force-EDID-*-macos-universal.pkg` — installs into `/Applications`
+- **Zip:** `Force-EDID-*-macos-universal.zip` — drag `Force EDID.app` wherever you like
+
+Universal binary (Apple Silicon and Intel). The first time you open it, macOS may warn that the build is unsigned. Right-click → **Open**, then confirm.
 
 ## Build from source
 

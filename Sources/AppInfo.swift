@@ -1,8 +1,8 @@
 import Foundation
 
 enum AppInfo {
-    static let version = "1.5.2"
-    static let build = "16"
+    static let version = "1.6.0"
+    static let build = "17"
     static let maker = "DesertDog"
     static let makerURL = URL(string: "https://desertdog.nl")!
     static let githubReleasesURL = URL(string: "https://github.com/desertdognl/force-edid/releases")!

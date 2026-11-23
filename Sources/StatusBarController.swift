@@ -88,9 +88,9 @@ final class StatusBarController {
         let window = NSWindow(contentViewController: hosting)
         window.title = "Force EDID"
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 840, height: 560))
-        window.minSize = NSSize(width: 760, height: 500)
-        window.maxSize = NSSize(width: 1100, height: 780)
+        window.setContentSize(NSSize(width: 860, height: 600))
+        window.minSize = NSSize(width: 780, height: 540)
+        window.maxSize = NSSize(width: 1100, height: 820)
         window.center()
         window.isReleasedWhenClosed = false
         window.delegate = AppDelegate.shared

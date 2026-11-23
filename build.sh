@@ -58,19 +58,34 @@ codesign --force --deep --sign - \
 
 DIST="$ROOT/dist"
 ZIP="$DIST/Force-EDID-${VERSION}-macos-universal.zip"
+PKG="$DIST/Force-EDID-${VERSION}-macos-universal.pkg"
 mkdir -p "$DIST"
-rm -f "$ZIP"
+
+# Drop previous local packages so dist/ only holds the current release.
 setopt +o nomatch
-rm -f "$DIST"/Force-EDID-*-macos-arm64.zip
+rm -f "$DIST"/Force-EDID-*.zip "$DIST"/Force-EDID-*.pkg "$DIST"/Force-EDID-*.dmg
 setopt -o nomatch
+
 ditto -c -k --keepParent --norsrc "$APP" "$ZIP"
+
+# Installer package → /Applications/Force EDID.app
+pkgbuild \
+  --component "$APP" \
+  --install-location /Applications \
+  --identifier com.fcu.ForceEDID \
+  --version "$VERSION" \
+  "$PKG" >/dev/null
 
 echo "Built: $APP"
 echo "Zip:   $ZIP"
+echo "Pkg:   $PKG"
 file "$MACOS/ForceEDID"
 echo
 echo "Open it with:"
 echo "  open \"$APP\""
+echo
+echo "Install with:"
+echo "  open \"$PKG\""
 echo
 echo "CLI:"
 echo "  \"$MACOS/ForceEDID\" --help"

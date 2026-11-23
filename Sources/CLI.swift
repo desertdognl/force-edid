@@ -146,6 +146,22 @@ enum CLI {
             print("Weekly schedule helpers: OK")
         }
 
+        let afternoon = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 16, minute: 40))!
+        let nextKeepAlive = KeepAliveSchedule.nextFire(
+            after: afternoon,
+            intervalHours: 12,
+            hour: 9,
+            minute: 0,
+            calendar: calendar
+        )
+        let expectedKeepAlive = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 21, minute: 0))!
+        if abs(nextKeepAlive.timeIntervalSince(expectedKeepAlive)) > 1 {
+            print("Keep-alive schedule: FAIL (\(nextKeepAlive) ≠ \(expectedKeepAlive))")
+            failed += 1
+        } else {
+            print("Keep-alive schedule: OK")
+        }
+
         guard failed == 0 else {
             fputs("Self-test failed.\n", stderr)
             exit(1)

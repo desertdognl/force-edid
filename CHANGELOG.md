@@ -8,6 +8,15 @@ and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Bump `AppInfo.version` and `AppInfo.build` in `Sources/AppInfo.swift` for every release,
 add an entry here, then run `./build.sh`.
 
+## [1.6.0] - 2026-11-23
+
+### Added
+
+- **Re-lock on schedule** (on/off): re-injects assigned EDIDs every N hours, aligned to a clock time (e.g. every 12h at 09:00 → 09:00 and 21:00). For links that go black without the Mac dropping the display (SDI / vMix).
+- **Re-lock after wake** (on/off): re-injects after Mac wake, screens wake, or session unlock.
+- Neither option polls the display coprocessor for signal health — only a normal Apply.
+- macOS **.pkg installer** that places the app in `/Applications` (zip still available).
+
 ## [1.5.2] - 2026-10-26
 
 ### Added
